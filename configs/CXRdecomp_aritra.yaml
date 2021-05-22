@@ -1,0 +1,13 @@
+# @package _group_
+network:
+  model: "CXRdecomp"
+  use_norm: "none"
+  activation_func: "leakyRelu"
+  input_views: 1
+
+general:
+  batch_size: 1
+  learning_rate: 0.00001
+  loss: "BCEloss"
+  overfit_batches: 0
+  data_aug: false

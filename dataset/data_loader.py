@@ -7,9 +7,9 @@ from volumentations import *
 from generate_drr import do_full_prprocessing
 # dataset paths
 
-train_folder = "/beegfs/desy/user/ibaltrus/dataset/train"
-val_folder = "/beegfs/desy/user/ibaltrus/dataset/val"
-app_folder = "/beegfs/desy/user/ibaltrus/dataset/val"
+train_folder = "/beegfs/desy/user/ibaltrus/aritra_project/dataset/train"
+val_folder = "/beegfs/desy/user/ibaltrus/aritra_project/dataset/val"
+app_folder = "/beegfs/desy/user/ibaltrus/aritra_project/dataset/val"
 
 class ImageData(Dataset):
 	def __init__(self, train=True, input_views=1, data_aug=False):
@@ -85,7 +85,7 @@ class ImageData(Dataset):
 		elif self.input_views == 2:
 			drr_lat = (drr_lat - self.norm_max)
 			input_stack = torch.from_numpy(np.array([drr_front, drr_lat]))
-		elif self.input_views == 2:
+		elif self.input_views == 3:
 			drr_lat = (drr_lat - self.norm_max)
 			drr_top = (drr_top - self.norm_max)
 			input_stack = torch.from_numpy(np.array([drr_front, drr_lat, drr_top]))
