@@ -4,8 +4,8 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import OneCycleLR, ReduceLROnPlateau
 
 from loss_metric import psnr
-from ssim import SSIM
-from network_aritra import CXRdecomp
+from ssim import ssim
+from network_aritra import CXRdecomp5
 from dataset.data_loader import CXRDecompDataModule
 
 import pytorch_lightning as pl
@@ -39,7 +39,7 @@ class LitCXRDecomp(pl.LightningModule):
 		self.input_views = input_views
 		self.data_range = data_range
 
-		self.model = CXRdecomp(batch_size,
+		self.model = CXRdecomp5(batch_size,
 									use_norm=use_norm,
 									activation_func=activation_func,
 									input_views=input_views)
@@ -47,10 +47,10 @@ class LitCXRDecomp(pl.LightningModule):
 		self.loss_l2 = nn.MSELoss()
 		self.loss_l1 = nn.L1Loss()
 
-		self.metric_ssim2d = SSIM(channel=1, spatial_dims=2, data_range=self.data_range)
+		#self.metric_ssim2d = SSIM(channel=1, spatial_dims=3, data_range=self.data_range)
 		#self.metric_ssim3d = SSIM(channel=1, spatial_dims=3, data_range=self.data_range)
 		self.save_hyperparameters()
-		self.example_input_array = torch.randn((1, self.input_views, 512, 512))
+		self.example_input_array = torch.randn((1, self.input_views, 256, 256))
 
 	def forward(self, x):
 		out, out_drr = self.model(x)
@@ -65,14 +65,16 @@ class LitCXRDecomp(pl.LightningModule):
 		self.last_logits = torch.sigmoid(logits)
 		self.last_logits_drr = torch.sigmoid(logits_drr)
 
-		loss_reco = 0.5 * torch.sqrt(self.loss_l2(logits_drr, torch.add(x, self.data_range)))
-		loss_peudo_ct = 0.9 * torch.sqrt(self.loss_l2(logits, y)) + 0.1 * self.loss_l1(logits, y)
+		loss_reco = 0.5 * torch.sqrt(self.loss_l2(self.last_logits_drr, torch.add(x, self.data_range)))
+		loss_peudo_ct = 0.9 * torch.sqrt(self.loss_l2(self.last_logits, y)) + 0.1 * self.loss_l1(logits, y)
 		loss = loss_peudo_ct + loss_reco
 
 		self.log('train_loss_reco', loss_reco)
 		self.log('train_loss_peudo_ct', loss_peudo_ct)
-
-		ssim_metric = self.metric_ssim2d(self.last_logits, y)
+		ssim_metric = ssim(self.last_logits.reshape((self.last_logits.shape[0], 256, 256, 256)),
+										 y.reshape((y.shape[0], 256, 256, 256)))
+		# ssim_metric = self.metric_ssim2d(self.last_logits.reshape((self.last_logits.shape[0], 256, 256, 256)),
+		#								 y.reshape((y.shape[0], 256, 256, 256)))
 		psnr_metric = psnr(self.last_logits, y, data_range=self.data_range)
 		self.log('train_loss', loss)
 		self.log('train_ssim', ssim_metric)
@@ -85,17 +87,20 @@ class LitCXRDecomp(pl.LightningModule):
 		logits = logits.to(torch.float32)
 		logits_drr = logits_drr.to(torch.float32)
 
-		self.last_logits = torch.sigmoid(logits)
-		self.last_logits_drr = torch.sigmoid(logits_drr)
+		self.last_logits_val = torch.sigmoid(logits)
+		self.last_logits_drr_val = torch.sigmoid(logits_drr)
 
-		loss_reco = 0.5 * torch.sqrt(self.loss_l2(logits_drr, torch.add(x, self.data_range)))
-		loss_peudo_ct = 0.9 * torch.sqrt(self.loss_l2(logits, y)) + 0.1 * self.loss_l1(logits, y)
+		loss_reco = 0.5 * torch.sqrt(self.loss_l2(self.last_logits_drr_val, torch.add(x, self.data_range)))
+		loss_peudo_ct = 0.9 * torch.sqrt(self.loss_l2(self.last_logits_val, y)) + 0.1 * self.loss_l1(logits, y)
 		loss = loss_peudo_ct + loss_reco
 
 		self.log('val_loss_reco', loss_reco)
 		self.log('val_loss_peudo_ct', loss_peudo_ct)
 
-		ssim_metric = self.metric_ssim2d(self.last_logits_val, y)
+		#ssim_metric = self.metric_ssim2d(self.last_logits_val, y)
+		ssim_metric = ssim(self.last_logits_val.reshape((self.last_logits_val.shape[0], 256, 256, 256)),
+										 y.reshape((y.shape[0], 256, 256, 256)))
+
 		psnr_metric = psnr(self.last_logits_val, y, data_range=self.data_range)
 
 		if stage:
@@ -110,7 +115,7 @@ class LitCXRDecomp(pl.LightningModule):
 		self.evaluate(batch, 'test')
 
 	def configure_optimizers(self):
-		optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)#, weight_decay=5e-4)
+		optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr, weight_decay=5e-4)#, )
 		steps_per_epoch = 146 // self.hparams.batch_size
 		scheduler_dict = {
 			#'scheduler': OneCycleLR(optimizer, 0.001, epochs=self.trainer.max_epochs, steps_per_epoch=steps_per_epoch),
@@ -125,7 +130,7 @@ class LitCXRDecomp(pl.LightningModule):
 def main(config_path) :
 	#logger = logging.getLogger(__name__)
 	# data loading
-	os.chdir('/beegfs/desy/user/ibaltrus/repos/cxrDecomp')
+	#os.chdir('/beegfs/desy/user/ibaltrus/repos/cxrDecomp')
 	with open(config_path) as file:
 		# The FullLoader parameter handles the conversion from YAML
 		# scalar values to Python the dictionary format

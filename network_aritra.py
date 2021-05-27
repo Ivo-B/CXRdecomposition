@@ -191,6 +191,7 @@ class CXRdecomp(nn.Module):
 		self.input_views = input_views
 		self.cna1 = ConvNormActiv(input_views, 128, activation_func=activation_func, norm_layer=norm_layer2d,
 								  use_norm=use_norm, kernel_size=3, dim='2d')
+		self.enc_cna1 = nn.MaxPool2d(2)
 		#self.enc_cna1 = DoubleConvBlock2d(128, 128, use_norm=use_norm, activation_func=activation_func, stride=2)
 		self.enc_cna2 = DoubleConvBlock2d(128, 256, use_norm=use_norm, activation_func=activation_func, stride=2)  # 128
 		self.enc_cna3 = DoubleConvBlock2d(256, 512, use_norm=use_norm, activation_func=activation_func, stride=2)  # 64
@@ -227,7 +228,7 @@ class CXRdecomp(nn.Module):
 
 	def forward(self, x_in):
 		x = self.cna1(x_in)
-		#x = self.enc_cna1(x)
+		x = self.enc_cna1(x)
 		x = self.enc_cna2(x)
 		x = self.enc_cna3(x)
 		x = self.enc_cna4(x)
@@ -245,7 +246,7 @@ class CXRdecomp(nn.Module):
 		x = self.trans_cna3(x)
 		x = self.trans_upsample3(x)  # 256, 64 ,64, 64
 
-		x = x.reshape((x.shape[0], 128, 64, 64, 64))
+		x = x.reshape((x.shape[0], 128, 128, 128, 128))
 		x = self.trans_cna4(x)
 		x = self.trans_upsample4(x)  # 128, 128 ,128, 128
 
@@ -253,7 +254,7 @@ class CXRdecomp(nn.Module):
 		x = self.dec_upsample1(x)  # 64, 256 ,256, 256
 
 		x = self.dec_cna2(x)  # 32, 256 ,256, 256
-		x = self.dec_upsample2(x)  # 32, 512 ,512, 512
+		#x = self.dec_upsample2(x)  # 32, 512 ,512, 512
 
 		x = self.dec_cna3(x)  # 16, 512 ,512, 512
 		out_y = self.dec_cna4(x)  # 1, 512 ,512, 512
@@ -261,5 +262,86 @@ class CXRdecomp(nn.Module):
 		x = x.reshape((out_y.shape[0], 512, 512, 512))
 		x = self.dec_cna5(x)  #  256 ,512, 512
 		out_yy = self.dec_cna6(x)  #  3 ,512, 512
+
+		return out_y, out_yy
+
+
+class CXRdecomp5(nn.Module):
+	def __init__(self, batch_size, use_norm='group_norm', activation_func: str = 'relu', input_views=1):
+		super().__init__()
+		if use_norm == 'none':
+			norm_layer2d = nn.Identity
+			norm_layer3d = nn.Identity
+		elif use_norm == 'group_norm':
+			norm_layer2d = nn.GroupNorm
+			norm_layer3d = nn.GroupNorm
+
+		self.batch_size = batch_size
+		self.input_views = input_views
+		self.cna1 = ConvNormActiv(input_views, 128, activation_func=activation_func, norm_layer=norm_layer2d,
+								  use_norm=use_norm, kernel_size=3, dim='2d')
+		self.enc_cna1 = DoubleConvBlock2d(128, 128, use_norm=use_norm, activation_func=activation_func, stride=2)
+		self.enc_cna2 = DoubleConvBlock2d(128, 256, use_norm=use_norm, activation_func=activation_func, stride=2)  # 128
+		self.enc_cna3 = DoubleConvBlock2d(256, 512, use_norm=use_norm, activation_func=activation_func, stride=2)  # 64
+		self.enc_cna4 = DoubleConvBlock2d(512, 1024, use_norm=use_norm, activation_func=activation_func, stride=2)  # 64
+		self.enc_cna5 = DoubleConvBlock2d(1024, 2048, use_norm=use_norm, activation_func=activation_func, stride=2)  # 64
+
+		self.trans_cna1 = ConvNormActiv(1024, 1024, activation_func=activation_func, norm_layer=norm_layer3d,
+										use_norm=use_norm, kernel_size=1, dim='3d')
+		self.trans_upsample1 = nn.Upsample(scale_factor=2, mode='trilinear')
+		self.trans_cna2 = ConvNormActiv(512, 512, activation_func=activation_func, norm_layer=norm_layer3d,
+										use_norm=use_norm, kernel_size=1, dim='3d')
+		self.trans_upsample2 = nn.Upsample(scale_factor=2, mode='trilinear')
+		self.trans_cna3 = ConvNormActiv(256, 256, activation_func=activation_func, norm_layer=norm_layer3d,
+										use_norm=use_norm, kernel_size=1, dim='3d')
+		self.trans_upsample3 = nn.Upsample(scale_factor=2, mode='trilinear')
+
+		self.dec_cna1 = DoubleConvBlock3d(256, 128, use_norm=use_norm, activation_func=activation_func, stride=1)
+		self.dec_upsample1 = nn.Upsample(scale_factor=2, mode='trilinear')
+		self.dec_cna2 = DoubleConvBlock3d(128, 64, use_norm=use_norm, activation_func=activation_func, stride=1)
+		self.dec_upsample2 = nn.Upsample(scale_factor=2, mode='trilinear')
+		self.dec_cna3 = DoubleConvBlock3d(64, 32, use_norm=use_norm, activation_func=activation_func, stride=1)
+		self.dec_cna4 = ConvNormActiv(32, 1, activation_func='none', norm_layer=nn.Identity, use_norm=use_norm,
+									  kernel_size=3, dim='3d')
+
+		self.dec_cna5 = ConvNormActiv(256, 128, activation_func=activation_func, norm_layer=nn.Identity,
+									  use_norm=use_norm,
+									  kernel_size=3, dim='2d')
+		self.dec_cna6 = ConvNormActiv(128, input_views, activation_func='none', norm_layer=nn.Identity,
+									  use_norm=use_norm,
+									  kernel_size=3, dim='2d')
+
+	def forward(self, x_in):
+		x = self.cna1(x_in)
+		x = self.enc_cna1(x)
+		x = self.enc_cna2(x)
+		x = self.enc_cna3(x)
+		x = self.enc_cna4(x)
+		x = self.enc_cna5(x) # 2048, 8, 8
+
+		x = x.reshape((x.shape[0], 1024, 2, 8, 8))
+		x = self.trans_cna1(x)
+		x = self.trans_upsample1(x)  # 1024, 4 ,16, 16
+
+		x = x.reshape((x.shape[0], 512, 8, 16, 16))
+		x = self.trans_cna2(x)
+		x = self.trans_upsample2(x)  # 512, 16 ,32, 32
+
+		x = x.reshape((x.shape[0], 256, 32, 32, 32))
+		x = self.trans_cna3(x)
+		x = self.trans_upsample3(x)  # 256, 64 ,64, 64
+
+		x = self.dec_cna1(x)  # 128, 64 ,64, 64
+		x = self.dec_upsample1(x)  # 128, 128 ,128, 128
+
+		x = self.dec_cna2(x)  # 64, 128 ,128, 128
+		x = self.dec_upsample2(x)  # 64, 256 ,256, 256
+
+		x = self.dec_cna3(x)  # 32, 256 ,256, 256
+		out_y = self.dec_cna4(x)  # 1, 256 ,256, 256
+
+		x = out_y.reshape((out_y.shape[0], 256, 256, 256))
+		x = self.dec_cna5(x)
+		out_yy = self.dec_cna6(x)
 
 		return out_y, out_yy

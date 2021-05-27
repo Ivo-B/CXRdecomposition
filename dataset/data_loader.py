@@ -4,12 +4,17 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 import pytorch_lightning as pl
 from volumentations import *
-from generate_drr import do_full_prprocessing
+from utils.generate_drr import do_full_prprocessing
+#from generate_drr import do_full_prprocessing
 # dataset paths
 
 train_folder = "/beegfs/desy/user/ibaltrus/aritra_project/dataset/train"
 val_folder = "/beegfs/desy/user/ibaltrus/aritra_project/dataset/val"
 app_folder = "/beegfs/desy/user/ibaltrus/aritra_project/dataset/val"
+
+train_folder = "/beegfs/desy/user/ibaltrus/dataset/train"
+val_folder = "/beegfs/desy/user/ibaltrus/dataset/val"
+app_folder = "/beegfs/desy/user/ibaltrus/dataset/val"
 
 class ImageData(Dataset):
 	def __init__(self, train=True, input_views=1, data_aug=False):
@@ -58,6 +63,7 @@ class ImageData(Dataset):
 		img_list.sort()
 
 		ct_image = np.load(os.path.join(self.root_dir, self.data[index], img_list[0])).astype(np.float32)
+		[drr_front, drr_lat, drr_top] = do_full_prprocessing(ct_image, self.input_views)
 		## clip 0.5%
 		p_low = np.percentile(ct_image, 0.5)
 		p_high = np.percentile(ct_image, 99.5)
@@ -70,13 +76,11 @@ class ImageData(Dataset):
 			ct_image = self.transform(image=ct_image)['image'].astype(np.float32)
 
 		# drr_front, drr_lat, drr_top = do_full_prprocessing(ct_image)
-		[drr_front, drr_lat, drr_top] = do_full_prprocessing(ct_image, self.input_views)
 		drr_front = (drr_front - np.min(drr_front)) * (self.norm_max / (np.max(drr_front) - np.min(drr_front)))
 		if self.input_views > 1:
 			drr_lat = (drr_lat - np.min(drr_lat)) * (self.norm_max / (np.max(drr_lat) - np.min(drr_lat)))
 		if self.input_views > 2:
 			drr_top = (drr_top - np.min(drr_top)) * (self.norm_max / (np.max(drr_top) - np.min(drr_top)))
-
 
 
 		drr_front = (drr_front - self.norm_max)

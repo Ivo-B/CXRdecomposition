@@ -69,13 +69,13 @@ class ImagePlotCallback(Callback):  # pragma: no-cover
 		x, y = batch
 		self.data_range = pl_module.data_range
 		try:
-			if pl_module.model_type == 'CXRdecomp2':
-				logits = pl_module.last_logits_val
-				logits_drr = pl_module.last_logits_drr_val
-				self._plot_withdrr(x, y, logits, logits_drr, trainer, 'validation')
-				return
-			else:
-				logits = pl_module.last_logits_val
+			#if pl_module.model_type == 'CXRdecomp2':
+			logits = pl_module.last_logits_val
+			logits_drr = pl_module.last_logits_drr_val
+			self._plot_withdrr(x, y, logits, logits_drr, trainer, 'validation')
+			return
+			#else:
+			#	logits = pl_module.last_logits_val
 		except AttributeError as err:
 			m = """please track the last_logits in the training_step like so:
 		                def training_step(...):
