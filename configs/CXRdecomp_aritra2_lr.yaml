@@ -3,11 +3,11 @@ network:
   model: "CXRdecomp"
   use_norm: "none"
   activation_func: "leakyRelu"
-  input_views: 1
+  input_views: 2
 
 general:
   batch_size: 1
-  learning_rate: 0.00003
+  learning_rate: 0.0003
   loss: "Combined"
   overfit_batches: 0
   data_aug: false

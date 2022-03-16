@@ -30,7 +30,7 @@ class LitCXRDecomp(pl.LightningModule):
 				 lr=0.05,
 				 activation_func='relu',
 				 loss_type='L2',
-				 model_type='CXRdecomp2',
+				 model_type='CXRdecomp',
 				 input_views=2,
 				 data_range=1):
 		super().__init__()
@@ -59,53 +59,68 @@ class LitCXRDecomp(pl.LightningModule):
 	def training_step(self, batch, batch_idx):
 		x, y = batch
 		logits, logits_drr = self.model(x)
-		logits = logits.to(torch.float32)
-		logits_drr = logits_drr.to(torch.float32)
+		logits, logits_drr = logits.to(torch.float32), logits_drr.to(torch.float32)
 
 		self.last_logits = torch.sigmoid(logits)
+		#self.last_logits = (logits)
 		self.last_logits_drr = torch.sigmoid(logits_drr)
+		#self.last_logits_drr = (logits_drr)
 
 		loss_reco = 0.5 * torch.sqrt(self.loss_l2(self.last_logits_drr, torch.add(x, self.data_range)))
-		loss_peudo_ct = 0.9 * torch.sqrt(self.loss_l2(self.last_logits, y)) + 0.1 * self.loss_l1(logits, y)
+		loss_peudo_ct = 0.9 * torch.sqrt(self.loss_l2(self.last_logits, y)) + 0.1 * self.loss_l1(self.last_logits, y)
 		loss = loss_peudo_ct + loss_reco
 
 		self.log('train_loss_reco', loss_reco)
 		self.log('train_loss_peudo_ct', loss_peudo_ct)
-		ssim_metric = ssim(self.last_logits.reshape((self.last_logits.shape[0], 256, 256, 256)),
-										 y.reshape((y.shape[0], 256, 256, 256)))
+		# remove extra dim
+		self.last_logits = self.last_logits.reshape((self.last_logits.shape[0], 256, 256, 256))
+		y = y.reshape((self.last_logits.shape[0], 256, 256, 256))
+
+		ssim_metric_front = ssim(self.last_logits, y)
+		ssim_metric_top = ssim(torch.transpose(self.last_logits, 1, 2), torch.transpose(y, 1, 2))
+		ssim_metric_lat = ssim(torch.transpose(self.last_logits, 1, 3), torch.transpose(y, 1, 3))
 		# ssim_metric = self.metric_ssim2d(self.last_logits.reshape((self.last_logits.shape[0], 256, 256, 256)),
 		#								 y.reshape((y.shape[0], 256, 256, 256)))
 		psnr_metric = psnr(self.last_logits, y, data_range=self.data_range)
 		self.log('train_loss', loss)
-		self.log('train_ssim', ssim_metric)
+		self.log('train_ssim_front', ssim_metric_front)
+		self.log('train_ssim_top', ssim_metric_top)
+		self.log('train_ssim_lat', ssim_metric_lat)
 		self.log('train_psnr', psnr_metric)
 		return loss
 
 	def evaluate(self, batch, stage=None):
 		x, y = batch
 		logits, logits_drr = self.model(x)
-		logits = logits.to(torch.float32)
-		logits_drr = logits_drr.to(torch.float32)
+		logits, logits_drr = logits.to(torch.float32), logits_drr.to(torch.float32)
 
 		self.last_logits_val = torch.sigmoid(logits)
+		#self.last_logits_val = (logits)
 		self.last_logits_drr_val = torch.sigmoid(logits_drr)
+		#self.last_logits_drr_val = (logits_drr)
 
 		loss_reco = 0.5 * torch.sqrt(self.loss_l2(self.last_logits_drr_val, torch.add(x, self.data_range)))
-		loss_peudo_ct = 0.9 * torch.sqrt(self.loss_l2(self.last_logits_val, y)) + 0.1 * self.loss_l1(logits, y)
+		loss_peudo_ct = 0.9 * torch.sqrt(self.loss_l2(self.last_logits_val, y)) + 0.1 * self.loss_l1(self.last_logits_val, y)
 		loss = loss_peudo_ct + loss_reco
 
 		self.log('val_loss_reco', loss_reco)
 		self.log('val_loss_peudo_ct', loss_peudo_ct)
 
 		#ssim_metric = self.metric_ssim2d(self.last_logits_val, y)
-		ssim_metric = ssim(self.last_logits_val.reshape((self.last_logits_val.shape[0], 256, 256, 256)),
-										 y.reshape((y.shape[0], 256, 256, 256)))
+		self.last_logits_val = self.last_logits_val.reshape((self.last_logits_val.shape[0], 256, 256, 256))
+		y = y.reshape((y.shape[0], 256, 256, 256))
+
+		ssim_metric_front = ssim(self.last_logits_val, y)
+		ssim_metric_top = ssim(torch.transpose(self.last_logits_val, 1, 2), torch.transpose(y, 1, 2))
+		ssim_metric_lat = ssim(torch.transpose(self.last_logits_val, 1, 3), torch.transpose(y, 1, 3))
 
 		psnr_metric = psnr(self.last_logits_val, y, data_range=self.data_range)
 
 		if stage:
 			self.log(f'{stage}_loss', loss, prog_bar=True)
-			self.log(f'{stage}_ssim', ssim_metric, prog_bar=True)
+			self.log(f'{stage}_ssim_front', ssim_metric_front, prog_bar=True)
+			self.log(f'{stage}_ssim_top', ssim_metric_top, prog_bar=False)
+			self.log(f'{stage}_ssim_lat', ssim_metric_lat, prog_bar=False)
 			self.log(f'{stage}_psnr', psnr_metric, prog_bar=False)
 
 	def validation_step(self, batch, batch_idx):
@@ -115,7 +130,7 @@ class LitCXRDecomp(pl.LightningModule):
 		self.evaluate(batch, 'test')
 
 	def configure_optimizers(self):
-		optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr, weight_decay=5e-4)#, )
+		optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)#, #weight_decay=5e-4)#, )
 		steps_per_epoch = 146 // self.hparams.batch_size
 		scheduler_dict = {
 			#'scheduler': OneCycleLR(optimizer, 0.001, epochs=self.trainer.max_epochs, steps_per_epoch=steps_per_epoch),
@@ -171,7 +186,7 @@ def main(config_path) :
 	)
 
 	trainer = pl.Trainer(
-		accelerator='ddp',
+		#accelerator='ddp',
 		#accumulate_grad_batches=16,
 		progress_bar_refresh_rate=2,
 		max_epochs=1000,
@@ -194,7 +209,7 @@ if __name__ == '__main__':
 		description="Evaluates a trained model given the root path")
 
 	parser.add_argument('--config', type=str,
-						default='/beegfs/desy/user/ibaltrus/repos/cxrDecomp/configs/CXRdecomp3.yaml',
+						default='/beegfs/desy/user/ibaltrus/repos/cxrDecomp/configs/CXRdecomp_aritra.yaml',
 						help='Path to a config model which is to be tested')
 
 	args = parser.parse_args()

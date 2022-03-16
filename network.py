@@ -1092,7 +1092,7 @@ class CXRdecomp5(nn.Module):
 		x = self.enc_cna2(x)
 		x = self.enc_cna3(x)
 		x = self.enc_cna4(x)
-		x = self.enc_cna5(x)
+		x = self.enc_cna5(x) # 2048, 8, 8
 
 		x = x.reshape((x.shape[0], 1024, 2, 8, 8))
 		x = self.trans_cna1(x)

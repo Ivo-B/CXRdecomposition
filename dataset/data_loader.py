@@ -96,6 +96,7 @@ class ImageData(Dataset):
 		else:
 			raise ValueError
 
+		#ct_image = np.transpose(ct_image, axes=(1, 0, 2))
 		ct_image = torch.from_numpy(ct_image[np.newaxis, ...])
 		return input_stack, ct_image
 

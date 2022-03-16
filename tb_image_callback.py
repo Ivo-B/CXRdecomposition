@@ -101,13 +101,13 @@ class ImagePlotCallback(Callback):  # pragma: no-cover
 		# pick the last batch and logits
 		x, y = batch
 		try:
-			if pl_module.model_type == 'CXRdecomp2':
+			#if pl_module.model_type == 'CXRdecomp2':
 				logits = pl_module.last_logits
 				logits_drr = pl_module.last_logits_drr
 				self._plot_withdrr(x, y, logits, logits_drr, trainer, 'training')
 				return
-			else:
-				logits = pl_module.last_logits
+			#else:
+			#	logits = pl_module.last_logits
 		except AttributeError as err:
 			m = """please track the last_logits in the training_step like so:
                 def training_step(...):
@@ -140,6 +140,8 @@ class ImagePlotCallback(Callback):  # pragma: no-cover
 			logits_drr_front_i = logits_drr_i[0]
 			if logits_drr_i.shape[0] > 1:
 				logits_drr_lat_i = logits_drr_i[1]
+			if logits_drr_i.shape[0] > 2:
+				logits_drr_top_i = logits_drr_i[2]
 
 			slices = [0, 29, 58, 87, 116, 145, 174, 203, 232]
 			for i in range(0, 9):
@@ -151,9 +153,12 @@ class ImagePlotCallback(Callback):  # pragma: no-cover
 				if x_i.shape[0] > 2:
 					self.__draw_sample(fig, axarr, 2, 0, drr_top_i, f'Top DDR')
 
-				self.__draw_sample(fig, axarr, 2, 0, logits_drr_front_i, f'generated front DDR', min_max = True, data_range=self.data_range)
+				self.__draw_sample(fig, axarr, 3, 0, logits_drr_front_i, f'generated front DDR', min_max = True, data_range=self.data_range)
 				if logits_drr_i.shape[0] > 1:
-					self.__draw_sample(fig, axarr, 3, 0, logits_drr_lat_i, f'generated lat DDR', min_max = True, data_range=self.data_range)
+					self.__draw_sample(fig, axarr, 3, 1, logits_drr_lat_i, f'generated lat DDR', min_max = True, data_range=self.data_range)
+				if logits_drr_i.shape[0] > 2:
+					self.__draw_sample(fig, axarr, 3, 2, logits_drr_top_i, f'generated top DDR', min_max = True, data_range=self.data_range)
+
 				self.__draw_sample(fig, axarr, 0, 1, y_i[slice_num, :, :], f'true front CT slice-{slice_num}', min_max = True, data_range=self.data_range)
 				self.__draw_sample(fig, axarr, 1, 1, np.transpose(y_i[:, :, slice_num], (1, 0)), f'true lat CT slice-{slice_num}', min_max = True, data_range=self.data_range)
 				self.__draw_sample(fig, axarr, 2, 1, y_i[:, slice_num, :], f'true top CT slice-{slice_num}', min_max = True, data_range=self.data_range)

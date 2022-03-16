@@ -3,7 +3,7 @@ network:
   model: "CXRdecomp"
   use_norm: "none"
   activation_func: "leakyRelu"
-  input_views: 1
+  input_views: 2
 
 general:
   batch_size: 1
